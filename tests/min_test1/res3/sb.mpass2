@@ -1,0 +1,20 @@
+#!/bin/bash
+#rm slurm*
+
+#SBATCH --nodes=1
+#SBATCH --tasks-per-node=1
+#SBATCH --partition=compute-cpu
+#SBATCH --output=log.slurm.%J.out
+#SBATCH --error=log.slurm.%J.err
+#SBATCH --time=96:00:00
+
+module purge
+module load gcc/8.2.0
+module load slurm/20.11.9
+module load nlopt/2.7.1
+module load spack/gsl/2.7.1
+module load cuba/4.2.2
+
+rm -f main
+g++ -std=c++11 -O3 -g -frounding-math main.cxx -o main -lm -lgsl -lgslcblas -lcuba -lnlopt
+srun ./main data.run 

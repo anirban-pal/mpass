@@ -1,0 +1,247 @@
+6c6
+<     double axialE, bendE, cohE, kinE, totE, time;
+---
+>     double axialE, bendE, cohE, kinE, totE, time, momT[3];
+11c11
+<     std::vector<Vector3> CPx,CPv,CPf,CPa;
+---
+>     std::vector<Vector3> CPx,CPv,CPf,CPa,CPw,CPdof;
+13c13
+<     std::vector<std::vector<int>> fibers; 
+---
+>     std::vector<std::vector<int>> fibers, CP_bid; 
+16,19c16,17
+<     
+<     
+<     gsl_matrix *GM, *GMdot, *GN;
+<     gsl_matrix *Psys, *Qsys, *Rsys, *Fsys;
+---
+>     gsl_matrix *GM, *GMdot, *GN, *GMinv;
+>     gsl_matrix *Psys, *Qsys, *Rsys, *Fsys, *Wsys, *qH, *pH, *Vsys;
+30,31c28,32
+<     void update_sys(double,gsl_matrix *,gsl_matrix *, int);
+<     void integrate_runge_kutta_4(int, double);  
+---
+>     
+>     double dMdQ(int, int, int, int);
+>     void compute_dH(int);
+>     //void update_sys(double,gsl_matrix *,gsl_matrix *, int);
+>     //void integrate_runge_kutta_4(int, double);  
+68c69
+<     double x[3]; int tmp,fdof[3];
+---
+>     double x[3],v[3],tmp0[3]; int tmp,fdof[3];
+70c71
+<     ss >> tmp >> x[0] >> x[1] >> x[2] >> fdof[0] >> fdof[1] >> fdof[2];
+---
+>     ss >> tmp >> tmp0[0] >> tmp0[1] >> tmp0[2] >> x[0] >> x[1] >> x[2] >> v[0] >> v[1] >> v[2] >> fdof[0] >> fdof[1] >> fdof[2];
+76a78,79
+>     CPw.push_back(Vector3(v[0],v[1],v[2]));
+>     CPdof.push_back(Vector3(fdof[0],fdof[1],fdof[2]));
+80a84,86
+>     
+>     std::vector<int> bid_rank;
+>     CP_bid.push_back(bid_rank);
+86c92
+<     cBezier bzi; int tmp[6]; 
+---
+>     cBezier bzi; int tmp[6]; double length0; 
+88c94
+<     ss >> tmp[0] >> tmp[1] >> tmp[2] >> tmp[3] >> tmp[4] >> tmp[5];
+---
+>     ss >> tmp[0] >> tmp[1] >> tmp[2] >> tmp[3] >> tmp[4] >> tmp[5] >> length0;
+95a102,103
+>     bzi.length0 = length0;
+>     //printf("Initialize bezier: %d ",i+1);
+98a107,110
+>     
+>     loop(j,4) {
+>       CP_bid[(tmp[j+2]-1)].push_back(tmp[0]); //CP_bid[(tmp[j+2]-1)].push_back(j+1);
+>     }
+137a150,151
+>   CPw.resize(CPx.size());
+>   
+169c183
+<   fprintf(fp, "ITEM: ATOMS id mol type q xu yu zu\n");
+---
+>   fprintf(fp, "ITEM: ATOMS id mol type q xu yu zu px py pz\n");
+172c186,187
+<     fprintf(fp, "%d %d 1 0.00 %.6f %.6f %.6f\n", i+1, CP_fid[i], CPx[i].comp[0], CPx[i].comp[1], CPx[i].comp[2]);
+---
+>     int bezid = CP_bid[i][0];
+>     fprintf(fp, "%d %d 1 %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.0f %.0f %.0f\n", i+1, CP_fid[i], Bz_list[bezid-1].length0, CPx[i].comp[0], CPx[i].comp[1], CPx[i].comp[2], CPw[i].comp[0], CPw[i].comp[1], CPw[i].comp[2], CPdof[i].comp[0], CPdof[i].comp[1], CPdof[i].comp[2] );
+212a228,229
+>   loop(j,3) momT[j] = 0;
+>   
+226c243
+<       Bz_list[k-1].axial_ef();      
+---
+>       Bz_list[k-1].axial_ef();    
+229a247,250
+>       Bz_list[k-1].penalty_ef();
+>       
+>       
+>       Bz_list[k-1].momentum();
+238a260,261
+>       //printf("Bezier %d Axial Energy: %lf, %lf %lf\n",k,Bz_list[k-1].axialE,Bz_list[k-1].length,Bz_list[k-1].length0);
+>       
+243a267,268
+>       loop(j,3) momT[j] += Bz_list[k-1].mom[j];
+>       
+266c291
+<   totE = axialE + bendE + cohE + kinE;
+---
+>   //totE = axialE + bendE + cohE + kinE;
+288c313
+<     FN->Bz_list[i].update_bezier();
+---
+>     FN->Bz_list[i].update_bezier(0);
+514a540,543
+> }
+> 
+> double fibnetwork::dMdQ(int r, int l, int m, int n)
+> {
+515a545,546
+>   double res1 = 0;
+>   std::vector<int>::iterator it;
+516a548,562
+>   for(it = CP_bid[m].begin(); it != CP_bid[m].end(); it++ )    {
+>     int bid = *it;
+>     int start = Bz_list[bid-1].CP[0]-1;
+>     int end = Bz_list[bid-1].CP[3]-1;
+>     int rank = m-start;
+>     
+>     if(r>=start && r<=end && l>=start && l<=end) {
+>       //printf("\n %d %d %d %d:  %d %d %d %d", r, l, bid, start, r-start, l-start, rank, n);
+>       //printf("\n %d %d %d %d: (%d) %d %d %d %d", r, l, m, n, bid-1, r-start, l-start, rank, n);
+>       res1 += Bz_list[bid-1].dM[r-start][l-start][rank][n];
+>     }
+>   }
+> 
+>   //return 0.0;
+>   return res1;
+519,521c565,606
+< void fibnetwork::computeK(gsl_matrix *K)
+< {
+<   gsl_matrix *Minv = gsl_matrix_alloc (np, np);
+---
+> void fibnetwork::compute_dH(int flag)
+> {  
+>   assemble_matrices(); 
+>   
+>   //gsl_matrix_print(GM,"GM0:");
+>   
+>   gsl_matrix *GMtmp = gsl_matrix_alloc (np, np);
+>   gsl_matrix_memcpy(GMtmp, GM);
+>   
+>   gsl_permutation *p = gsl_permutation_alloc(np); int s;
+>   gsl_linalg_LU_decomp(GMtmp, p, &s); gsl_linalg_LU_invert(GMtmp, p, GMinv); 
+>   
+>   gsl_permutation_free(p); gsl_matrix_free(GMtmp);
+> 
+>   
+>   //gsl_matrix_print(GM,"GM1:");
+>   //gsl_matrix_print(GMinv,"GMinv:");
+>   //gsl_matrix_print(Wsys,"Wsys:");
+>   
+>   gsl_blas_dgemm (CblasNoTrans, CblasNoTrans, 1.0, GMinv, Wsys, 0.0, pH); //compute dH/dP(mn) = Qdot(mn)
+>   
+>   //gsl_matrix_print(pH,"pH:");
+> 
+>   if(1) {
+>     loop(i,np) loop(j,3) if(!isnan(gsl_matrix_get(pH,i,j))) CPv[i].comp[j] = gsl_matrix_get(pH,i,j);
+>     
+>     loop(i,nb) {
+>       loop(j,4) {
+>         int cpid = Bz_list[i].CP[j]-1;
+>         loop(k,3) {
+>           Bz_list[i].v[j*3+k] = CPv[cpid].comp[k];
+>         }
+>       }
+>       
+>       //Bz_list[i].momentum();
+>     }
+>   }
+>   
+>   if(flag) {
+>     compute_ef();
+>   
+>     //gsl_matrix_print(pH,"pH:");
+523c608,646
+<   //loop(i,np) printf("computeK,CPf0: %d %lf %lf %lf\n",i+1,CPf[i].comp[0],CPf[i].comp[1],CPf[i].comp[2]);
+---
+>     //loop(i,np) loop(j,3) gsl_matrix_set(Fsys, i,j, CPf[i].comp[j]);
+>     
+>     //loop(i,np) printf("computeK,CPf: %d %lf %lf %lf\n",i+1,CPf[i].comp[0],CPf[i].comp[1],CPf[i].comp[2]);
+>     if(1) {
+>       //gsl_permutation *p = gsl_permutation_alloc(np); int s;
+>       //gsl_linalg_LU_decomp(GM, p, &s); gsl_linalg_LU_invert(GM, p, GMinv); gsl_permutation_free(p);
+>       
+>       //gsl_matrix_print(GMinv,"GMinv:");
+>       //gsl_matrix_print(Wsys,"Wsys:");
+>       
+>       //gsl_blas_dgemm (CblasNoTrans, CblasNoTrans, 1.0, GMinv, Wsys, 0.0, pH); //compute dH/dP(mn)
+>       
+>       //gsl_matrix_print(pH,"pH:");
+>       
+>       double kinE1 = 0.0;
+>       loop(m,np) loop(n,3) {
+>         kinE1 += 0.5*gsl_matrix_get(pH,m,n)*gsl_matrix_get(Wsys,m,n);
+>       } 
+>       kinE = kinE1;
+>       
+>       //gsl_matrix_print(pH,"pH:");
+>       //gsl_matrix_print(Wsys,"Wsys:");
+>       
+>       //printf("kinE1: %lf\n",kinE1);
+>       
+>       //compute dH/dQ(mn)
+>       gsl_blas_dgemm(CblasNoTrans, CblasTrans, 1.0, pH, pH, 1.0, GN);
+>     
+>       if(1) loop(m,np) loop(n,3) {  
+>         double dHdQ2=0;
+>         
+>         loop(r,np) loop(l,np) {
+>           dHdQ2 += -0.5*gsl_matrix_get(GN,r,l)*dMdQ(r,l,m,n); //smart mapping required here
+>         }
+>         
+>         gsl_matrix_set(qH, m,n, -CPf[m].comp[n] + dHdQ2);
+>       }
+>       
+>       //gsl_matrix_print(qH,"qH:");
+524a648,653
+>     }
+>   }
+> }
+> 
+> void fibnetwork::computeK(gsl_matrix *K)
+> { 
+535a665,666
+>   gsl_matrix *GMtmp = gsl_matrix_alloc (np, np);
+>   gsl_matrix_memcpy(GMtmp, GM);
+538c669,671
+<   gsl_linalg_LU_decomp(GM, p, &s); gsl_linalg_LU_invert(GM, p, Minv); gsl_permutation_free(p);
+---
+>   gsl_linalg_LU_decomp(GMtmp, p, &s); gsl_linalg_LU_invert(GMtmp, p, GMinv); 
+>   
+>   gsl_permutation_free(p); gsl_matrix_free(GMtmp);
+547c680
+<   gsl_blas_dgemm (CblasNoTrans, CblasNoTrans, 1.0, Minv, Fsys, 0.0, Rsys);
+---
+>   gsl_blas_dgemm (CblasNoTrans, CblasNoTrans, 1.0, GMinv, Fsys, 0.0, Rsys);
+550,559d682
+<   //gsl_matrix_print(Fsys,"Fsys");
+<   //gsl_matrix_print(Minv,"Minv");
+< 
+<   //gsl_matrix_print(Qsys,"Qsys");
+<   //gsl_matrix_print(Rsys,"Rsys");
+< 
+< 
+<   //gsl_matrix_print(K,"K");
+< 
+<   gsl_matrix_free(Minv);
+561a685,686
+> 
+> /*
+663a789
+> */
